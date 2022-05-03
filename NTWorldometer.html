@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>TB & Covid-19</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- including ECharts file -->
+    <script src="echarts_4_7.min.js"></script>
+	<script src="lodash.js"></script>
+	<script src="chroma.js"></script>
+	<script src="jquery_3.5.min.js"></script>
+	<script src="Covid_TB_Worldometer.js"></script>
+	
+    <style type="text/css">body{color:#444444;font-family:Arial,Helvetica,sans-serif;font-size:75%}a{color:#4D87C7;text-decoration:none}.callout{position:fixed;bottom:5px;right:20px;margin-left:20px;max-width:100%}.callout-header{padding:5px;background:#555;font-size:14px;color:white}.callout-container{padding:5px;background-color:#ccc;color:black}.closebtn{position:absolute;top:5px;right:15px;color:white;font-size:20px;cursor:pointer}.closebtn:hover{color:lightgrey}.collapsible{background-color:#777;color:white;cursor:pointer;padding:8px;width:100%;border:none;text-align:left;outline:none;font-size:15px}.active,.collapsible:hover{background-color:#555}.collapsible:after{content:'\002B';color:white;font-weight:bold;float:right;margin-left:5px}.active:after{content:"\2212"}.content{padding:0 18px;background-color:white;max-height:0;overflow:hidden;transition:max-height 0.2s ease-out}</style>
+  </head>
+  
+  <body> <!-- prepare a DOM container with width and height -->
+  
+     <div id="Covid" style="width: 100%;height: 90vh;"></div>
+	<script type="text/javascript">
+	
+	
+	
+	async function getData(url = '', data = {}) {
+	  const response = await fetch(url, {
+		method: 'GET', 
+		headers: {"Accept": "application/json, text/plain, */*"},
+	  });
+	  return response.json(); // parses JSON response into native JavaScript objects
+	}
+
+	getData("https://covid19-server.chrismichael.now.sh/api/v1/AllReports", { answer: 200 })
+	  .then(data => {
+		console.log(data); // JSON data parsed by `response.json()` call
+	  });
+
+		
+	
+</script>
+
+<button type="button" class="collapsible">Notes & Disclaimer. Press + to get details about data sources, analysis and map boundaries</button>
+
+ <div class="content">
+  <span class="closebtn" onclick="this.parentElement.style.display='none';">×</span>
+  
+	   <p>Covid-19 figures are updated from Worldometer several times a day. The Global TB database from WHO is used as the source for TB data</p>
+	   <p>Average daily Covid-19 incidence and deaths are calculated as the total number of people confirmed as Covid-19 positive divided by the number of days transcurred since the first notified case. TB related data reflect estimates provided by WHO for 2018. Daily estimates for TB correspond to yearly estimates for mortality and incidence divided by 365</p>
+	   <p>The designations employed and the presentation of the material on this map do not imply the expression of any opinion whatsoever on the part of the Stop TB Secretariat concerning the legal status of any country, territory, city or area or of its authorities, or concerning the delimitation of its frontiers or boundaries. White discontinuous lines are used to represent boundaries under dispute and to approximately show the line of control in Jammu and Kashmir agreed upon by India and Pakistan. This map is based on UN Map No. 4170 Rev. 15 (July 2018). Every effort is made to ensure this map is free of errors but there is no warrant the map or its features are either spatially or temporally accurate or fit for a particular use. This map is provided without any warranty of any kind whatsoever, either express or implied.</p>
+	</div>
+
+
+<script>
+var coll = document.getElementsByClassName("collapsible");
+var i;
+
+for (i = 0; i < coll.length; i++) {
+  coll[i].addEventListener("click", function() {
+    this.classList.toggle("active");
+    var content = this.nextElementSibling;
+    if (content.style.maxHeight){
+      content.style.maxHeight = null;
+    } else {
+      content.style.maxHeight = content.scrollHeight + "px";
+    }
+  });
+}
+
+</script>
+  
+
+  
+	
+	
+
+
+ 
+
+ 
+
+
+  </body>
+</html>

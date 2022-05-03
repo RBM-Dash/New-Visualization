@@ -1,0 +1,1977 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>TB & Covid-19</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- including ECharts file -->
+    <script src="js/echarts_en_4.9.min.js"></script>
+    <script src="js/lodash.js"></script>
+    <script src="js/chroma.js"></script>
+    <script src="js/Covid_TB_Worldometer.js"></script>
+    <script src="js/jquery_3.5.min.js"></script>
+
+    <style type="text/css">
+        body {
+            color: #444444;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 75%
+        }
+        
+        a {
+            color: #4D87C7;
+            text-decoration: none
+        }
+        
+        .callout {
+            position: fixed;
+            bottom: 5px;
+            right: 20px;
+            margin-left: 20px;
+            max-width: 100%
+        }
+        
+        .callout-header {
+            padding: 5px;
+            background: #555;
+            font-size: 14px;
+            color: white
+        }
+        
+        .callout-container {
+            padding: 5px;
+            background-color: #ccc;
+            color: black
+        }
+        
+        .closebtn {
+            position: absolute;
+            top: 5px;
+            right: 15px;
+            color: white;
+            font-size: 20px;
+            cursor: pointer
+        }
+        
+        .closebtn:hover {
+            color: lightgrey
+        }
+        
+        .collapsible {
+            background-color: #777;
+            color: white;
+            cursor: pointer;
+            padding: 8px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 15px
+        }
+        
+        .active,
+        .collapsible:hover {
+            background-color: #555
+        }
+        
+        .collapsible:after {
+            content: '\002B';
+            color: white;
+            font-weight: bold;
+            float: right;
+            margin-left: 5px
+        }
+        
+        .active:after {
+            content: "\2212"
+        }
+        
+        .content {
+            padding: 0 18px;
+            background-color: white;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.2s ease-out
+        }
+    </style>
+</head>
+
+<body>
+    <!-- prepare a DOM container with width and height -->
+    <div id="Covid" style="width: 100%;height: 90vh;"></div>
+    <script type="text/javascript">
+        function makeTemp(t, h, s, i, a, n, e) {
+            this.CountryName = t, this.TBCases = s, this.ISO3 = h, this.Days = a, this.CovidAvInc = Math.round(n / a), this.Confirmed = n, this.CovidAvDeaths = Math.round(e / a), this.Deaths = e, this.TBAvDeaths = Math.round(i / 365), this.TBDeaths = i, this.TBAvInc = Math.round(s / 365)
+        }
+
+        function getDaysSinceFirts(e) {
+            let t = Date.now();
+            var n = new Date(e).getTime();
+            return daysDiff(n, t)
+        }
+
+        function formatDiscrete(value1, value2) {
+
+            if (value2 !== undefined) {
+                return value1.toLocaleString(undefined, {
+                    maximumFractionDigits: 0
+                }) + ' - ' + value2.toLocaleString(undefined, {
+                    maximumFractionDigits: 0
+                });
+            } else {
+                return ' <= ' + value1.toLocaleString(undefined, {
+                    maximumFractionDigits: 0
+                });
+            }
+        };
+        var myRedScale = ['#ffffe0', '#ffe9b7', '#ffd196', '#ffb67f', '#ff9b6f', '#f98065', '#ee665d', '#e14d54', '#cf3548', '#bb1e37', '#a40921', '#8b0000', '#580000', '#2D0000'];
+        var myColors = myRedScale;
+        var toWorldo = 'https://api.allorigins.win/get?url=' + encodeURIComponent('https://www.worldometers.info/coronavirus/#countries/');
+        $.get(toWorldo, function(data) {
+            var scrData = [];
+            $(data.contents).find("tr").each(function() {
+                var text = _.split($(this).text(), '\n');
+                var temp1 = {};
+                if (!_.startsWith(text[2], 'Total')) {
+                    temp1.Country = text[2];
+                    temp1.TotalCases = parseFloat(text[3].replace(/[^\d\.\-]/g, ""));
+                    temp1.TotalDeaths = parseFloat(text[5].replace(/[^\d\.\-]/g, ""));
+                    temp1.NewCases = parseFloat(text[4].replace(/[^\d\.\-]/g, ""));
+                    temp1.NewDeaths = parseFloat(text[6].replace(/[^\d\.\-]/g, ""));
+                    scrData.push(temp1);
+                };
+            });
+            //console.log(scrData);
+            var WCountries = _.map(scrData, 'Country');
+            var WHOCountries = _.map(World2WHO, 'WHO_Name');
+            WHOCountries = _.filter(WHOCountries, function(o) {
+                return o;
+            });
+            var x;
+            var temp;
+            var Conf;
+            var Conft;
+            var Dt;
+            var Deaths;
+            var kk;
+            var iso;
+            var TBD;
+            var dataMine = [];
+            for (x of WHOCountries) {
+                kk = _.filter(World2WHO, {
+                    'WHO_Name': x
+                });
+                temp = _.filter(scrData, {
+                    'Country': kk[0].W_Name
+                });
+                temp = _.orderBy(temp, ['TotalCases', 'TotalDeaths'], ['desc', 'desc']);
+                //console.log(temp);
+                if (temp.length > 0) {
+                    var aaaa = temp[0];
+                    Conf = aaaa.TotalCases;
+                    Deaths = aaaa.TotalDeaths;
+                    if (_.isNumber(Conf) & _.isNaN(Deaths)) {
+                        Deaths = 0;
+                    };
+                    //console.log(Conf); console.log(Deaths);
+                    var ddays = new Date(kk[0].DateFirst);
+                    var mDays = getDaysSinceFirts(ddays);
+                    if (_.isNil(mDays)) {
+                        mDays = 0
+                    };
+                } else {
+                    Conf = 0;
+                    Deaths = 0;
+                    mDays = 0;
+                };
+                inTB = _.filter(TBData, {
+                    'country': x,
+                    'indicators': 'TB deaths'
+                });
+                if (inTB.length > 0) {
+                    iso = inTB[0].iso3;
+                    TBD = inTB[0].x2018;
+                    inTB = _.filter(TBData, {
+                        'country': x,
+                        'indicators': 'TB cases'
+                    });
+                    TBC = inTB[0].x2018;
+
+                } else {
+                    TBD = 0;
+                    TBC = 0;
+                };
+                var temp1 = new makeTemp(x, iso, TBC, TBD, mDays, Conf, Deaths);
+                dataMine.push(temp1);
+            };
+            //console.log(dataMine);
+            var resultdata0 = [];
+            var resultdata1 = [];
+            var resultdata2 = [];
+            var resultdata3 = [];
+            var resultdatab4 = [];
+            var resultdatab5 = [];
+            var resultdatab6 = [];
+            var resultdatab7 = [];
+            var sum0 = 0;
+            var sum1 = 0;
+            var sum2 = 0;
+            var sum3 = 0;
+            var titledata = [];
+            for (var i = 0; i < dataMine.length; i++) {
+                var d0 = {
+                    name: dataMine[i].CountryName,
+                    value: Number(dataMine[i].TBAvDeaths),
+                    date: dataMine[i].Date
+                };
+                var d1 = {
+                    name: dataMine[i].CountryName,
+                    value: Number(dataMine[i].TBAvInc),
+                    date: dataMine[i].Date
+                };
+                var d2 = {
+                    name: dataMine[i].CountryName,
+                    value: _.isNaN(Number(dataMine[i].CovidAvDeaths)) ? 0 : Number(dataMine[i].CovidAvDeaths),
+                    date: dataMine[i].Date
+                };
+                var d3 = {
+                    name: dataMine[i].CountryName,
+                    value: _.isNaN(Number(dataMine[i].CovidAvInc)) ? 0 : Number(dataMine[i].CovidAvInc),
+                    date: dataMine[i].Date
+                };
+                var d4 = {
+                    name: dataMine[i].CountryName,
+                    value: Number(dataMine[i].TBDeaths),
+                    date: dataMine[i].Date
+                };
+                var d5 = {
+                    name: dataMine[i].CountryName,
+                    value: Number(dataMine[i].TBCases),
+                    date: dataMine[i].Date
+                };
+                var d6 = {
+                    name: dataMine[i].CountryName,
+                    value: Number(dataMine[i].Deaths),
+                    date: dataMine[i].Date
+                };
+                var d7 = {
+                    name: dataMine[i].CountryName,
+                    value: Number(dataMine[i].Confirmed),
+                    date: dataMine[i].Date
+                };
+                titledata.push(dataMine[i].CountryName)
+                resultdata0.push(d0);
+                resultdata1.push(d1);
+                resultdata2.push(d2);
+                resultdata3.push(d3);
+                resultdatab4.push(d4);
+                resultdatab5.push(d5);
+                resultdatab6.push(d6);
+                resultdatab7.push(d7);
+                sum0 += !isNaN(dataMine[i].TBDeaths) ? dataMine[i].TBDeaths : 0;
+                sum1 += !isNaN(dataMine[i].TBCases) ? dataMine[i].TBCases : 0;
+
+            };
+
+            var mmT = _.filter(scrData, {
+                'Country': 'World'
+            });
+
+            mmT = _.orderBy(mmT, ['TotalCases', 'TotalDeaths'], ['desc', 'desc']);
+            sum2 = mmT[0].TotalDeaths;
+            sum3 = mmT[0].TotalCases;
+
+            function NumDescSort(a, b) {
+                return a.value - b.value;
+            }
+
+            resultdata0.sort(NumDescSort);
+            resultdata1.sort(NumDescSort);
+            resultdata2.sort(NumDescSort);
+            resultdata3.sort(NumDescSort);
+
+            resultdatab4 = _.reject(resultdata0, function(o) {
+                return isNaN(o.value);
+            });
+            resultdatab5 = _.reject(resultdata1, function(o) {
+                return isNaN(o.value);
+            });
+            resultdatab6 = _.reject(resultdata2, function(o) {
+                return isNaN(o.value);
+            });
+            resultdatab7 = _.reject(resultdata3, function(o) {
+                return isNaN(o.value);
+            });
+            var resultdatab0 = _.reject(resultdatab4, function(o) {
+                return isNaN(o.value);
+            });
+            var resultdatab1 = _.reject(resultdatab5, function(o) {
+                return isNaN(o.value);
+            });
+            var resultdatab2 = _.reject(resultdatab6, function(o) {
+                return isNaN(o.value);
+            });
+            var resultdatab3 = _.reject(resultdatab7, function(o) {
+                return isNaN(o.value);
+            });
+
+            var myValues = _.map(resultdatab0, 'value').concat(_.map(resultdatab1, 'value'));
+            myValues = myValues.concat(_.map(resultdatab2, 'value'));
+            myValues = myValues.concat(_.map(resultdatab3, 'value'));
+            myValues = myValues.concat(_.map(resultdatab4, 'value'));
+            myValues = myValues.concat(_.map(resultdatab5, 'value'));
+            myValues = myValues.concat(_.map(resultdatab6, 'value'));
+            myValues = myValues.concat(_.map(resultdatab7, 'value'));
+
+            var resultdata4 = _.orderBy(resultdatab4, 'value', 'desc').slice(0, 20);
+            var resultdata5 = _.orderBy(resultdatab5, 'value', 'desc').slice(0, 20);
+            var resultdata6 = _.orderBy(resultdatab6, 'value', 'desc').slice(0, 20);
+            var resultdata7 = _.orderBy(resultdatab7, 'value', 'desc').slice(0, 20);
+            var myMax = _.orderBy([resultdata4[0], resultdata5[0], resultdata6[0], resultdata7[0]], 'value', 'desc').slice(0, 1);
+            var mymax = 2 * Math.floor(myMax[0].value);
+
+            var titledata4 = _.map(resultdata4, 'name');
+            var titledata5 = _.map(resultdata5, 'name');
+            var titledata6 = _.map(resultdata6, 'name');
+            var titledata7 = _.map(resultdata7, 'name');
+
+            var myrange2 = chroma.limits(myValues, 'q', 100);
+            var myrange = chroma.limits(myValues, 'q', 12);
+            var NN = _.compact(myrange2).filter(function(x) {
+                return x >= 0
+            });
+            var myrange3 = chroma.limits(NN, 'l', 13);
+            var min0 = 0;
+            var min1 = Math.round(myrange3[1]);
+            var min2 = Math.round(myrange3[2]);
+            var min3 = Math.round(myrange3[3]);
+            var min4 = Math.round(myrange3[4]);
+            var min5 = Math.round(myrange3[5]);
+            var min6 = Math.round(myrange3[6]);
+            var min7 = Math.round(myrange3[7]);
+            var min8 = Math.round(myrange3[8]);
+            var min9 = Math.round(myrange3[9]);
+            var min10 = Math.round(myrange3[10]);
+            var min11 = Math.round(myrange3[11]);
+
+            var myVisualMap = [{
+                type: 'piecewise',
+                splitNumber: 11,
+                itemGap: 3,
+                min: 0,
+                max: mymax,
+                seriesIndex: [0, 1, 2, 3],
+                calculable: true,
+                zlevel: 4,
+                outOfRange: {
+                    color: '#e8eaed',
+                },
+                formatter: function(value1, value2) {
+                    if (value2 !== undefined) {
+                        return value1.toLocaleString(undefined, {
+                            maximumFractionDigits: 0
+                        }) + ' - ' + value2.toLocaleString(undefined, {
+                            maximumFractionDigits: 0
+                        });
+                    } else {
+                        return ' <= ' + value1.toLocaleString(undefined, {
+                            maximumFractionDigits: 0
+                        });
+                    }
+                },
+                pieces: [
+                    //{value: -999999999999, label: 'Not Applicable', color: '#aaa1a1'},
+                    {
+                        min: 0,
+                        max: min0,
+                        label: '<=' + min0.toLocaleString(undefined, {
+                            maximumFractionDigits: 0
+                        }),
+                        color: myColors[0]
+                    }, {
+                        min: min0,
+                        max: min1,
+                        color: myColors[1]
+                    }, {
+                        min: min1,
+                        max: min2,
+                        color: myColors[2]
+                    }, {
+                        min: min2,
+                        max: min3,
+                        color: myColors[3]
+                    }, {
+                        min: min3,
+                        max: min4,
+                        color: myColors[4]
+                    }, {
+                        min: min4,
+                        max: min5,
+                        color: myColors[5]
+                    }, {
+                        min: min5,
+                        max: min6,
+                        color: myColors[6]
+                    }, {
+                        min: min6,
+                        max: min7,
+                        color: myColors[7]
+                    }, {
+                        min: min7,
+                        max: min8,
+                        color: myColors[8]
+                    }, {
+                        min: min8,
+                        max: min9,
+                        color: myColors[9]
+                    }, {
+                        min: min9,
+                        max: min10,
+                        color: myColors[10]
+                    }, {
+                        min: min10,
+                        max: min11,
+                        color: myColors[11]
+                    }, {
+                        min: min11,
+                        max: mymax,
+                        label: '> ' + min11.toLocaleString(undefined, {
+                            maximumFractionDigits: 0
+                        }),
+                        color: myColors[12]
+                    }, {
+                        value: 999999999999,
+                        label: 'Not Applicable',
+                        color: '#e8eaed'
+                    },
+
+                ],
+
+                showLabel: true,
+                textStyle: {
+                    color: '#414141',
+                    fontFamily: '"Helvetica", Helvetica',
+                },
+
+
+            }];
+            var myDStyle = {
+                normal: {
+                    areaColor: "#D3D3D3",
+                    borderColor: "rgba(255,255,255,.5)",
+                    shadowColor: "#1773c3",
+                    shadowBlur: 0
+                },
+                emphasis: {
+                    areaColor: "#E3E3E3",
+                    color: "#414141",
+                    borderColor: BGColor = "rgb(65,65,65,0.5)",
+                    borderWidth: .5
+                }
+            };
+            var myToolbox = {
+                show: true,
+                orient: 'vertical',
+                left: 'right',
+                top: 'center',
+                feature: {
+                    saveAsImage: {
+                        title: 'save as image'
+                    }
+                }
+            };
+            var myGrid = {
+                left: 'right',
+                top: 'bottom',
+                width: '30%',
+                height: '80%'
+            };
+            var myXAxis = [{
+                position: 'top',
+                type: 'value',
+                boundaryGap: false,
+                splitLine: {
+                    show: false
+                },
+                axisLine: {
+                    show: false
+                },
+                axisTick: {
+                    show: false
+                },
+            }];
+            var myYAxis = [{
+                type: 'category',
+                data: titledata,
+
+                axisTick: {
+                    alignWithLabel: true
+                }
+            }];
+
+            var myToolTip = {
+                trigger: 'item',
+                confine: true,
+                formatter: function(params) {
+
+                    var myWhole = _.filter(dataMine, {
+                        'CountryName': params.name
+                    });
+
+                    myWhole = myWhole[0];
+
+                    var TBpD = (myWhole.TBAvInc < 1) ? "<1" : Number(myWhole.TBAvInc).toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    });
+                    var TBDpD = (myWhole.TBAvDeaths < 1) ? "<1" : Number(myWhole.TBAvDeaths).toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    });
+                    var TotTBInc = (myWhole.TBCases < 1) ? "<1" : Number(myWhole.TBCases).toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    });
+                    var TotTBD = (myWhole.TBDeaths < 1) ? "<1" : Number(myWhole.TBDeaths).toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    });
+                    var CovAvCases = (myWhole.CovidAvInc < 1) ? "<1" : Number(myWhole.CovidAvInc).toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    });
+                    var CovAvDeaths = (myWhole.CovidAvDeaths < 1) ? "<1" : Number(myWhole.CovidAvDeaths).toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    });
+                    var CovTotalDeaths = (myWhole.Deaths < 1) ? "<1" : Number(myWhole.Deaths).toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    });
+                    var CovTotalCases = (myWhole.Confirmed < 1) ? "<1" : Number(myWhole.Confirmed).toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    });
+                    CovAvCases = _.isNaN(CovAvCases) ? 0 : CovAvCases;
+                    CovAvDeaths = _.isNaN(CovAvDeaths) ? 0 : CovAvDeaths;
+
+                    var res = '<div style="border-bottom: 1px solid rgba(255,255,255,.3); font-size: 14px;padding-bottom: 7px;margin-bottom: 7px">' +
+                        params.name + '   <br/>' + '</div>' +
+                        'People developing ' + '<b>TB</b>' + ' per day: ' + '<b>' + TBpD + '</b>' + '<br/>' +
+                        'People dying from ' + '<b>TB</b>' + ' per day: ' + '<b>' + TBDpD + '</b>' + '<br/>' +
+                        'People developing ' + '<b>TB</b>' + ' per year: ' + '<b>' + TotTBInc + '</b>' + '<br/>' +
+                        'People dying from ' + '<b>TB</b>' + ' per year: ' + '<b>' + TotTBD + '</b>' + '<br/>' + '<br/>' +
+                        'People confirmed ' + '<b>+ to Covid-19</b>' + ' per day: ' + '<b>' + CovAvCases + '</b>' + '<br/>' +
+                        'People dying from ' + '<b>Covid-19</b>' + ' per day: ' + '<b>' + CovAvDeaths + '</b>' + '<br/>' +
+                        'People confirmed ' + '<b>+ to Covid-19</b>' + ', Total: ' + '<b>' + CovTotalCases + '</b>' + '<br/>' +
+                        'People dying from ' + '<b>Covid-19</b>' + ' Total: ' + '<b>' + CovTotalDeaths + '</b>' + '<br/>';
+
+                    return res;
+
+                }
+            };
+
+            var myChart = echarts.init(document.getElementById('Covid'));
+
+            function autoFontSize(bigSize, smallSize) {
+                let width = document.getElementById('Covid').offsetWidth;
+                console.log(width);
+                console.log(Math.round(width / 11));
+                return (width >= 700) ? '' + bigSize : '' + smallSize;
+            };
+            myChart.setOption({
+                series: [{
+                    type: 'map',
+                    map: 'world',
+
+                }]
+            });
+
+
+            optionTBD = {
+                title: [{
+                    text: 'NSP GAP',
+
+                    left: 'center',
+                    textStyle: {
+                        color: 'black',
+                        fontSize: autoFontSize(20, 12)
+                    }
+                }, {
+                    text: 'CRSPC Programmatic & Financial GAP Tracker',
+                    link: 'https://www.who.int/tb/country/data/download/en/',
+                    target: 'blank',
+                    top: 'bottom',
+                    left: 'right',
+                    textStyle: {
+                        color: 'lightgrey',
+                        fontSize: autoFontSize(12, 10)
+                    }
+                }, {
+                    subtext: 'Please click one of these indicators',
+                    top: '2%',
+                    left: 'left'
+                }, {
+                    text: 'GAP (USD): ' + sum0.toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    }),
+                    left: 'right',
+                    bottom: '6%',
+
+                    textStyle: {
+                        color: 'black',
+                        fontSize: autoFontSize(18, 12)
+                    }
+                }],
+                tooltip: myToolTip,
+                legend: {
+                    top: '8%',
+                    orient: 'horizontal',
+                    left: 'left',
+                    width: '100%',
+                    itemGap: 6,
+                    itemWidth: 15,
+                    itemHeight: 10,
+                    data: ['NSP', 'RDT', 'IPTp', 'LLIN'],
+                    selected: {
+                        'NSP': true,
+                        'RDT': false,
+                        'IPTp': false,
+                        'LLIN': false
+                    },
+
+                },
+                visualMap: myVisualMap,
+                toolbox: myToolbox,
+                grid: myGrid,
+                xAxis: myXAxis,
+                yAxis: [{
+                    type: 'category',
+                    inverse: true,
+                    data: titledata4,
+                    axisTick: {
+                        alignWithLabel: true
+                    }
+                }],
+                geo: {
+                    id: "mygeo",
+                    map: "world",
+                    left: '1%',
+                    right: '35%',
+                    top: 100,
+                    bottom: "5%",
+                    zoom: 0.75,
+                    roam: true,
+                    label: {
+                        normal: {
+                            show: false
+                        },
+                        emphasis: {
+                            show: true,
+                            fontFamily: '"Helvetica", Helvetica',
+                            color: "rgba(255,255,255,.7)",
+                            backgroundColor: "rgba(0, 0, 0, 0.4)",
+                            borderRadius: 4,
+                            padding: 4,
+                            borderWidth: .1,
+                            borderColor: "rgb(65,65,65,0.5)"
+                        }
+                    },
+                    regions: myDRegions,
+                    itemStyle: myDStyle
+                },
+                series: [{
+                    z: 3,
+                    zlevel: 2,
+                    name: 'NSP',
+                    geoIndex: 0,
+                    type: 'map',
+                    mapType: "world",
+                    left: '1%',
+                    right: '35%',
+                    top: 100,
+                    bottom: "5%",
+                    zoom: 0.75,
+                    data: resultdata0
+                }, {
+                    z: 3,
+                    name: 'RDT',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    name: 'IPTp',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    name: 'LLIN',
+                    type: 'map',
+                }, {
+                    name: 'Top 20 Countries',
+                    z: 1,
+                    type: 'bar',
+                    label: {
+                        normal: {
+                            formatter: function(param, index) {
+                                var a = param.data.value;
+
+                                return a.toLocaleString(void 0, {
+                                    maximumFractionDigits: 0
+                                });
+                            },
+                            show: true
+                        },
+                        emphasis: {
+                            show: true,
+                        }
+                    },
+                    itemStyle: {
+                        color: '#8b0000',
+                        barBorderColor: '#8b0000',
+                        barBorderRadius: 3,
+
+                    },
+                    data: resultdata4
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(China_India_Right),
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(China_India_1),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_2),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_3),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_Pakistan_1),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_4),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_5),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_6),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(Sudan_SSudan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    data: convertData(Egypt_Sudan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_Pakistan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(Ethiopia_Somalia),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }]
+            };
+
+            optionTBI = {
+                title: [{
+                    text: 'RDT GAP ',
+                    left: 'center',
+                    textStyle: {
+                        color: 'black',
+                        fontSize: autoFontSize(20, 12)
+                    }
+                }, {
+                    text: 'CRSPC Programmatic & Financial GAP Tracker',
+                    link: 'https://www.who.int/tb/country/data/download/en/',
+                    target: 'blank',
+                    top: 'bottom',
+                    left: 'right',
+                    textStyle: {
+                        color: 'lightgrey',
+                        fontSize: autoFontSize(12, 10)
+                    }
+                }, {
+                    subtext: 'Please click one of these indicators',
+                    top: '2%',
+                    left: 'left'
+                }, {
+                    text: 'GAP in selected countries: ' + sum1.toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    }),
+                    left: 'right',
+                    bottom: '6%',
+
+                    textStyle: {
+                        color: 'black',
+                        fontSize: autoFontSize(18, 12)
+                    }
+                }],
+                tooltip: myToolTip,
+                legend: {
+                    top: '8%',
+                    orient: 'horizontal',
+                    left: 'left',
+                    width: '100%',
+                    itemGap: 6,
+                    itemWidth: 15,
+                    itemHeight: 10,
+                    data: ['NSP', 'RDT', 'IPTp', 'LLIN'],
+                    selected: {
+                        'NSP': false,
+                        'RDT': true,
+                        'IPTp': false,
+                        'LLIN': false
+                    },
+                    selectedMode: 'single',
+                },
+                visualMap: myVisualMap,
+                toolbox: myToolbox,
+                grid: myGrid,
+                xAxis: myXAxis,
+                yAxis: [{
+                    type: 'category',
+                    inverse: true,
+                    data: titledata5,
+                    axisTick: {
+                        alignWithLabel: true
+                    }
+                }],
+                geo: {
+                    id: "mygeo",
+                    map: "world",
+                    left: '1%',
+                    right: '35%',
+                    top: 100,
+                    bottom: "5%",
+                    zoom: 0.75,
+                    roam: true,
+                    label: {
+                        normal: {
+                            show: false
+                        },
+                        emphasis: {
+                            show: true,
+                            fontFamily: '"Helvetica", Helvetica',
+                            color: "rgba(255,255,255,.7)",
+                            backgroundColor: "rgba(0, 0, 0, 0.4)",
+                            borderRadius: 4,
+                            padding: 4,
+                            borderWidth: .1,
+                            borderColor: "rgb(65,65,65,0.5)"
+                        }
+                    },
+                    regions: myDRegions,
+                    itemStyle: myDStyle
+                },
+                series: [{
+                    z: 3,
+                    name: 'NSP',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    zlevel: 2,
+                    name: 'RDT',
+                    geoIndex: 0,
+                    type: 'map',
+                    mapType: "world",
+                    left: '1%',
+                    right: '35%',
+                    top: 100,
+                    bottom: "5%",
+                    zoom: 0.75,
+                    data: resultdata1
+                }, {
+                    z: 3,
+                    name: 'IPTp',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    name: 'LLIN',
+                    type: 'map',
+                }, {
+                    name: 'Top 20 Countries',
+                    z: 1,
+                    type: 'bar',
+                    label: {
+                        normal: {
+                            formatter: function(param, index) {
+                                var a = param.data.value;
+
+                                return a.toLocaleString(void 0, {
+                                    maximumFractionDigits: 0
+                                });
+                            },
+                            show: true
+                        },
+                        emphasis: {
+                            show: true,
+                        }
+                    },
+                    itemStyle: {
+                        color: '#8b0000',
+                        barBorderColor: '#8b0000',
+                        barBorderRadius: 3,
+
+                    },
+                    data: resultdata5
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(China_India_Right),
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(China_India_1),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_2),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_3),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_Pakistan_1),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_4),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_5),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_6),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(Sudan_SSudan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    data: convertData(Egypt_Sudan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_Pakistan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(Ethiopia_Somalia),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }]
+            };
+
+            optionCoD = {
+                title: [{
+                    text: 'People dying from Covid-19 (average per day)',
+                    left: 'center',
+                    textStyle: {
+                        color: 'black',
+                        fontSize: autoFontSize(20, 12)
+                    }
+                }, {
+                    text: 'Source: Worldometer',
+                    link: 'https://www.worldometers.info/coronavirus/#countries',
+                    target: 'blank',
+                    top: 'bottom',
+                    left: 'right',
+                    textStyle: {
+                        color: 'lightgrey',
+                        fontSize: autoFontSize(12, 10)
+                    }
+                }, {
+                    subtext: 'Please click one of these indicators',
+                    top: '2%',
+                    left: 'left'
+                }, {
+                    text: 'Covid-19 Deaths (Global): ' + sum2.toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    }),
+                    left: 'right',
+                    bottom: '6%',
+
+                    textStyle: {
+                        color: 'black',
+                        fontSize: autoFontSize(18, 12)
+                    }
+                }],
+                tooltip: myToolTip,
+                legend: {
+                    top: '8%',
+                    orient: 'horizontal',
+                    left: 'left',
+                    width: '100%',
+                    itemGap: 6,
+                    itemWidth: 15,
+                    itemHeight: 10,
+                    data: ['NSP', 'RDT', 'IPTp', 'LLIN'],
+                    selected: {
+                        'NSP': false,
+                        'RDT': false,
+                        'IPTp': true,
+                        'LLIN': false
+                    },
+                    selectedMode: 'single',
+                },
+                visualMap: myVisualMap,
+                toolbox: myToolbox,
+                grid: myGrid,
+                xAxis: myXAxis,
+                yAxis: [{
+                    type: 'category',
+                    inverse: true,
+                    data: titledata6,
+                    axisTick: {
+                        alignWithLabel: true
+                    }
+                }],
+                geo: {
+                    id: "mygeo",
+                    map: "world",
+                    left: '1%',
+                    right: '35%',
+                    top: 100,
+                    bottom: "5%",
+                    zoom: 0.75,
+                    roam: true,
+                    label: {
+                        normal: {
+
+                            show: false
+                        },
+                        emphasis: {
+                            show: true,
+                            fontFamily: '"Helvetica", Helvetica',
+                            color: "rgba(255,255,255,.7)",
+                            backgroundColor: "rgba(0, 0, 0, 0.4)",
+                            borderRadius: 4,
+                            padding: 4,
+                            borderWidth: .1,
+                            borderColor: "rgb(65,65,65,0.5)"
+                        }
+                    },
+                    regions: myDRegions,
+                    itemStyle: myDStyle
+                },
+                series: [{
+                    z: 3,
+                    name: 'NSP',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    name: 'RDT',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    zlevel: 2,
+                    name: 'IPTp',
+                    geoIndex: 0,
+                    type: 'map',
+                    mapType: "world",
+                    left: '1%',
+                    right: '35%',
+                    top: 100,
+                    bottom: "5%",
+                    zoom: 0.75,
+                    data: resultdata2
+                }, {
+                    z: 3,
+                    name: 'LLIN',
+                    type: 'map',
+                }, {
+                    name: 'Top 20 Countries',
+                    z: 1,
+                    type: 'bar',
+                    label: {
+                        normal: {
+                            formatter: function(param, index) {
+                                var a = param.data.value;
+
+                                return a.toLocaleString(void 0, {
+                                    maximumFractionDigits: 0
+                                });
+                            },
+                            show: true
+                        },
+                        emphasis: {
+                            show: true,
+                        }
+                    },
+                    itemStyle: {
+                        color: '#8b0000',
+                        barBorderColor: '#8b0000',
+                        barBorderRadius: 3,
+
+                    },
+                    data: resultdata6
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(China_India_Right),
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(China_India_1),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_2),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_3),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_Pakistan_1),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_4),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_5),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_6),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(Sudan_SSudan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    data: convertData(Egypt_Sudan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_Pakistan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(Ethiopia_Somalia),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }]
+            };
+
+
+            optionCoI = {
+                title: [{
+                    text: 'People getting sick with Covid-19 (average per day)',
+                    left: 'center',
+                    textStyle: {
+                        color: 'black',
+                        fontSize: autoFontSize(20, 12)
+                    }
+                }, {
+                    text: 'Source: Worldometer',
+                    link: 'https://www.worldometers.info/coronavirus/#countries',
+                    target: 'blank',
+                    top: 'bottom',
+                    left: 'right',
+                    textStyle: {
+                        color: 'lightgrey',
+                        fontSize: autoFontSize(12, 10)
+                    }
+                }, {
+                    subtext: 'Please click one of these indicators',
+                    top: '2%',
+                    left: 'left'
+                }, {
+                    text: 'Covid-19 infections (Global): ' + sum3.toLocaleString(void 0, {
+                        maximumFractionDigits: 0
+                    }),
+                    left: 'right',
+                    bottom: '6%',
+
+                    textStyle: {
+                        color: 'black',
+                        fontSize: autoFontSize(18, 12)
+                    }
+                }],
+                tooltip: myToolTip,
+                legend: {
+                    top: '8%',
+                    orient: 'horizontal',
+                    left: 'left',
+                    width: '100%',
+                    itemGap: 6,
+                    itemWidth: 15,
+                    itemHeight: 10,
+                    data: ['NSP', 'RDT', 'IPTp', 'LLIN'],
+                    selected: {
+                        'NSP': false,
+                        'RDT': false,
+                        'IPTp': false,
+                        'LLIN': true
+                    },
+                    selectedMode: 'single',
+                },
+                visualMap: myVisualMap,
+                toolbox: myToolbox,
+                grid: myGrid,
+                xAxis: myXAxis,
+                yAxis: [{
+                    type: 'category',
+                    data: titledata7,
+                    inverse: true,
+                    axisTick: {
+                        alignWithLabel: true
+                    }
+                }],
+                geo: {
+                    id: "mygeo",
+                    map: "world",
+                    left: '1%',
+                    right: '35%',
+                    top: 100,
+                    bottom: "5%",
+                    zoom: 0.75,
+                    roam: true,
+                    label: {
+                        normal: {
+                            show: false
+                        },
+                        emphasis: {
+                            show: true,
+                            fontFamily: '"Helvetica", Helvetica',
+                            color: "rgba(255,255,255,.7)",
+                            backgroundColor: "rgba(0, 0, 0, 0.4)",
+                            borderRadius: 4,
+                            padding: 4,
+                            borderWidth: .1,
+                            borderColor: "rgb(65,65,65,0.5)"
+                        }
+                    },
+                    regions: myDRegions,
+                    itemStyle: myDStyle
+                },
+                series: [{
+                    z: 3,
+                    name: 'NSP',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    name: 'RDT',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    name: 'IPTp',
+                    type: 'map',
+                }, {
+                    z: 3,
+                    zlevel: 2,
+                    name: 'LLIN',
+                    geoIndex: 0,
+                    type: 'map',
+                    mapType: "world",
+                    left: '1%',
+                    right: '35%',
+                    top: 100,
+                    bottom: "5%",
+                    zoom: 0.75,
+                    data: resultdata3
+                }, {
+                    name: 'Top 20 countries',
+                    z: 1,
+                    type: 'bar',
+                    visualMap: false,
+                    label: {
+                        normal: {
+                            formatter: function(param, index) {
+                                var a = param.data.value;
+
+                                return a.toLocaleString(void 0, {
+                                    maximumFractionDigits: 0
+                                });
+                            },
+                            show: true
+                        },
+                        emphasis: {
+                            show: true,
+                        }
+                    },
+                    itemStyle: {
+                        color: '#8b0000',
+                        barBorderColor: '#8b0000',
+                        barBorderRadius: 3,
+
+                    },
+                    data: resultdata7
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(China_India_Right),
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(China_India_1),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_2),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_3),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_Pakistan_1),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_4),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_5),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_China_6),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(Sudan_SSudan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    data: convertData(Egypt_Sudan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(India_Pakistan),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }, {
+                    type: "lines",
+                    zlevel: 2,
+                    polyline: !0,
+                    geoIndex: 0,
+                    coordinateSystem: "geo",
+                    data: convertData(Ethiopia_Somalia),
+                    silent: !0,
+                    lineStyle: {
+                        normal: {
+                            color: disputedBoundaryColor,
+                            type: "dotted",
+                            opacity: 1,
+                            width: 2
+                        }
+                    }
+                }]
+            };
+            myChart.setOption(optionTBD, true);
+
+
+
+            myChart.on('legendselectchanged', function(params) {
+
+                if (params.name == 'NSP') {
+                    myChart.setOption(optionTBD, true);
+
+                } else if (params.name == 'RDT') {
+                    myChart.setOption(optionTBI, true);
+
+                } else if (params.name == 'IPTp') {
+                    myChart.setOption(optionCoD, true);
+
+                } else {
+                    myChart.setOption(optionCoI, true);
+
+                }
+            });
+            window.onresize = function() {
+                if (myChart != null && myChart != undefined) {
+                    myChart.resize();
+                }
+            };
+
+
+        });
+    </script>
+    <button type="button" class="collapsible">Notes & Disclaimer. Press + to get details about data sources, analysis and map boundaries</button>
+    <div class="content">
+        <span class="closebtn" onclick="this.parentElement.style.display='none';">×</span>
+        <p>Covid-19 figures are updated from Worldometer several times a day. The Global TB database from WHO is used as the source for TB data</p>
+        <p>Average daily Covid-19 incidence and deaths are calculated as the total number of people confirmed as Covid-19 positive divided by the number of days transcurred since the first notified case. TB related data reflect estimates provided by WHO
+            for 2018. Daily estimates for TB correspond to yearly estimates for mortality and incidence divided by 365</p>
+        <p>The designations employed and the presentation of the material on this map do not imply the expression of any opinion whatsoever on the part of the Stop TB Secretariat concerning the legal status of any country, territory, city or area or of its
+            authorities, or concerning the delimitation of its frontiers or boundaries. White discontinuous lines are used to represent boundaries under dispute and to approximately show the line of control in Jammu and Kashmir agreed upon by India and
+            Pakistan. This map is based on UN Map No. 4170 Rev. 15 (July 2018). Every effort is made to ensure this map is free of errors but there is no warrant the map or its features are either spatially or temporally accurate or fit for a particular
+            use. This map is provided without any warranty of any kind whatsoever, either express or implied.</p>
+    </div>
+    <script>
+        var i, coll = document.getElementsByClassName("collapsible");
+        for (i = 0; i < coll.length; i++) coll[i].addEventListener("click", function() {
+            this.classList.toggle("active");
+            var l = this.nextElementSibling;
+            l.style.maxHeight ? l.style.maxHeight = null : l.style.maxHeight = l.scrollHeight + "px"
+        });
+    </script>
+</body>
+
+</html>
