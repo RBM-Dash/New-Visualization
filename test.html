@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>TB & Covid-19</title>
+    <!-- including ECharts file -->
+    <script src="echarts_4_7.min.js"></script>
+    <script src="papaparse.min.js"></script>
+	<script src="lodash.js"></script>
+	<script src="chroma.js"></script>
+	<script src="Covid_TB.js"></script>
+	
+    <style type="text/css">
+      body {
+          color: #444444;
+          font-family: Arial,Helvetica,sans-serif;
+          font-size: 75%;
+      }
+      a {
+          color: #4D87C7;
+          text-decoration: none;
+      }
+    
+
+	.callout {
+	  position: fixed;
+	  bottom: 35px;
+	  right: 20px;
+	  margin-left: 20px;
+	  max-width: 100%;
+	}
+
+	.callout-header {
+	  padding: 10px 10px;
+	  background: #555;
+	  font-size: 15px;
+	  color: white;
+	}
+
+	.callout-container {
+	  padding: 15px;
+	  background-color: #ccc;
+	  color: black
+	}
+
+	.closebtn {
+	  position: absolute;
+	  top: 5px;
+	  right: 15px;
+	  color: white;
+	  font-size: 20px;
+	  cursor: pointer;
+	}
+
+	.closebtn:hover {
+	  color: lightgrey;
+	}
+</style>
+  </head>
+  <body> <!-- prepare a DOM container with width and height -->
+    <div id="Covid" style="width: 100%;height:650px;"></div>
+    
+	
+	<script type="text/javascript">
+	
+	var myURL = "https://open-covid-19.github.io/data/data.csv";
+	
+	function makeTemp(country, iso, TB, TBD) {
+	  this.CountryName = country;
+	  this.TBCases = TB;
+	  this.ISO3 = iso;
+	  this.Days = 0;
+	  this.CovidAvInc = 0;
+	  this.Confirmed = 0;
+	  this.CovidAvDeaths = 0;
+	  this.Deaths = 0;
+	  this.TBAvDeaths = (TBD / 365).toFixed(1);
+	  this.TBDeaths = TBD;
+	  this.TBAvInc = (TB / 365).toFixed(1);
+	  
+	};
+	
+	var myRedScale = ['#ffffe0','#ffe9b7','#ffd196','#ffb67f','#ff9b6f','#f98065','#ee665d','#e14d54','#cf3548','#bb1e37','#a40921','#8b0000','#580000','#2D0000'];
+	var myColors = myRedScale;
+	
+	
+
+	Papa.parse(myURL, {
+            download: true,
+            header: true,
+            dynamicTyping: true,
+            complete: function(results) {
+			        
+					var TB_iso3 = _.uniq(_.map(TBData, 'iso3'));
+					var countries = _.filter(results.data, function(o) {
+                        return !o.RegionName;
+                    });
+					/*To remove all dates with no cases*/
+                    countries = _.filter(countries, function(o) {
+                        return o.Confirmed > 0;
+                    });
+                    countries = _.orderBy(countries, ['CountryName'], ['asc']);
+                    //Count how many items share the same CountryCode and store in count. This is the number of days since the case 1
+                    //Get the list of countries
+                    var cNames = _.map(countries, 'CountryName');
+                    /*Calculate Number of days since first case*/
+                    var count = {};
+                    cNames.forEach(function(i) {
+                        count[i] = (count[i] || 0) + 1;
+                    });
+                    //Keep the array with the latest notified figures. First sort by date and them keep the first element such that all countries in unique (cNames) are represented
+                    countriesO = _.orderBy(countries, ['Date'], ['desc']);
+                    uCName = _.uniq(cNames);
+                    var x;
+                    var temp;
+                    var inTB;
+                    var data = [];
+                    for (x of uCName) {
+                        //get first in the orject that match x
+                        temp = _.find(countriesO, ['CountryName', x]);
+                        let aa = _.valuesIn(_.pick(count, x));
+                        //Add the new fields to temp before storing. New fields are Count, CovidAvInc, CovAvDeaths, TBAvInc, TBAvDeaths, also relace iso2 by iso3
+                        //Identify count
+                        temp.Days = aa[0];
+                        temp.CovidAvInc = (temp.Confirmed / temp.Days).toFixed(1);
+                        temp.CovidAvDeaths = (temp.Deaths / temp.Days).toFixed(1);
+                        //Adding the TB data and the ISO3
+                        temp.ISO3 = _.valuesIn(_.pick(iso2Toiso3, temp.CountryCode))[0];
+                        inTB = _.filter(TBData, {
+                            'iso3': temp.ISO3,
+                            'indicators': 'TB deaths'
+                        });
+                        if (inTB[0]) {
+                            temp.TBDeaths = inTB[0].x2018;
+                        };
+                        temp.TBAvDeaths = (temp.TBDeaths / 365).toFixed(1);
+                        inTB = _.filter(TBData, {
+                            'iso3': temp.ISO3,
+                            'indicators': 'TB cases'
+                        });
+                        if (inTB[0]) {
+                            temp.CountryName = inTB[0].country;
+                            temp.TBCases = inTB[0].x2018;
+                        };
+                        temp.TBAvInc = (temp.TBCases / 365).toFixed(1);
+                        data.push(temp);
+                    };
+					//Here you add the same structure tocountries with TB data but no Covid
+					var Cov_iso3 = _.uniq(_.map(data, 'ISO3'));
+					var noCovid = _.difference(TB_iso3, Cov_iso3);
+					var aa;
+					var bb;
+					var cc;
+					
+					for (x of noCovid) {
+						inTB = _.filter(TBData, {
+                            'iso3': x,
+                            'indicators': 'TB deaths'
+                        });
+						aa=inTB[0].country;
+						bb= inTB[0].x2018;
+						inTB = _.filter(TBData, {
+                            'iso3': x,
+                            'indicators': 'TB cases'
+                        });
+						cc= inTB[0].x2018;
+					    var temp = new makeTemp(aa, x, cc,bb);
+                        data.push(temp);
+					};
+                    var resultdata0 = [];
+                    var resultdata1 = [];
+                    var resultdata2 = [];
+                    var resultdata3 = [];
+                    var resultdatab4 = [];
+                    var resultdatab5 = [];
+                    var resultdatab6 = [];
+                    var resultdatab7 = [];
+                    var sum0 = 0;
+                    var sum1 = 0;
+                    var sum2 = 0;
+                    var sum3 = 0;
+                    var titledata = [];
+                    for (var i = 0; i < data.length; i++) {
+                        var d0 = {
+                            name: data[i].CountryName,
+                            value: Number(data[i].TBAvDeaths),
+							date: data[i].Date
+                        };
+                        var d1 = {
+                            name: data[i].CountryName,
+                            value: Number(data[i].TBAvInc),
+							date: data[i].Date
+                        };
+                        var d2 = {
+                            name: data[i].CountryName,
+                            value: Number(data[i].CovidAvDeaths),
+							date: data[i].Date
+                        };
+                        var d3 = {
+                            name: data[i].CountryName,
+                            value: Number(data[i].CovidAvInc),
+							date: data[i].Date
+                        };
+                        var d4 = {
+                            name: data[i].CountryName,
+                            value: Number(data[i].TBDeaths),
+							date: data[i].Date
+                        };
+                        var d5 = {
+                            name: data[i].CountryName,
+                            value: Number(data[i].TBCases),
+							date: data[i].Date
+                        };
+                        var d6 = {
+                            name: data[i].CountryName,
+                            value: Number(data[i].Deaths),
+							date: data[i].Date
+                        };
+                        var d7 = {
+                            name: data[i].CountryName,
+                            value: Number(data[i].Confirmed),
+							date: data[i].Date
+                        };
+						console.log(d7);
+						titledata.push(data[i].CountryName)
+                        resultdata0.push(d0);
+                        resultdata1.push(d1);
+                        resultdata2.push(d2);
+                        resultdata3.push(d3);
+                        resultdatab4.push(d4);
+                        resultdatab5.push(d5);
+                        resultdatab6.push(d6);
+                        resultdatab7.push(d7);
+                        sum0 += !isNaN(data[i].TBDeaths) ? data[i].TBDeaths : 0;
+                        sum1 += !isNaN(data[i].TBCases) ? data[i].TBCases : 0;
+                        sum2 += !isNaN(data[i].Deaths) ? data[i].Deaths : 0;
+                        sum3 += !isNaN(data[i].Confirmed) ? data[i].Confirmed : 0;
+                    }
+
+                    function NumDescSort(a, b) {
+                        return a.value - b.value;
+                    }
+                    // You have to think better here is what goes in the bars are the daily rates or yearly rates.OJO
+ 					resultdata0.sort(NumDescSort);
+					resultdata1.sort(NumDescSort);
+					resultdata2.sort(NumDescSort);
+					resultdata3.sort(NumDescSort);
+                    resultdatab4 = _.reject(resultdata0, function(o) {
+                        return isNaN(o.value);
+                    });
+                    resultdatab5 = _.reject(resultdata1, function(o) {
+                        return isNaN(o.value);
+                    });
+                    resultdatab6 = _.reject(resultdata2, function(o) {
+                        return isNaN(o.value);
+                    });
+                    resultdatab7 = _.reject(resultdata3, function(o) {
+                        return isNaN(o.value);
+                    });
+					var resultdatab0 = _.reject(resultdatab4, function(o) {
+                        return isNaN(o.value);
+                    });
+                    var resultdatab1 = _.reject(resultdatab5, function(o) {
+                        return isNaN(o.value);
+                    });
+                    var resultdatab2 = _.reject(resultdatab6, function(o) {
+                        return isNaN(o.value);
+                    });
+                    var resultdatab3 = _.reject(resultdatab7, function(o) {
+                        return isNaN(o.value);
+                    });
+
+					var myValues =_.map(resultdatab0, 'value').concat(_.map(resultdatab1, 'value'));
+					myValues=myValues.concat(_.map(resultdatab2, 'value'));
+					myValues=myValues.concat(_.map(resultdatab3, 'value'));
+					myValues=myValues.concat(_.map(resultdatab4, 'value'));
+					myValues=myValues.concat(_.map(resultdatab5, 'value'));
+					myValues=myValues.concat(_.map(resultdatab6, 'value'));
+					myValues=myValues.concat(_.map(resultdatab7, 'value'));
+					  
+                    var resultdata4 = _.orderBy(resultdatab4, 'value', 'desc').slice(0, 20);
+                    var resultdata5 = _.orderBy(resultdatab5, 'value', 'desc').slice(0, 20);
+                    var resultdata6 = _.orderBy(resultdatab6, 'value', 'desc').slice(0, 20);
+                    var resultdata7 = _.orderBy(resultdatab7, 'value', 'desc').slice(0, 20);
+					var myMax = _.orderBy([resultdata4[0],resultdata5[0],resultdata6[0],resultdata7[0]], 'value', 'desc').slice(0, 1);
+					var mymax  = 2*Math.floor(myMax[0].value);
+					console.log(myMax[0].value);
+                    var titledata4 = _.map(resultdata4, 'name');
+                    var titledata5 = _.map(resultdata5, 'name');
+                    var titledata6 = _.map(resultdata6, 'name');
+                    var titledata7 = _.map(resultdata7, 'name');
+
+					var myrange2 = chroma.limits(myValues, 'q', 100); //  quantile mode, the input domain is divided by quantile ranges
+					var myrange = chroma.limits(myValues, 'q', 12); //  quantile mode, the input domain is divided by quantile ranges
+					var NN = _.compact(myrange2).filter(function(x){ return x >= 0 });
+					var myrange3 = chroma.limits(NN, 'l', 13);
+					var min0 = 0;
+					var min1 = Math.round(myrange3[1]);
+					var min2 = Math.round(myrange3[2]);
+					var min3 = Math.round(myrange3[3]);
+					var min4 = Math.round(myrange3[4]);
+					var min5 = Math.round(myrange3[5]);
+					var min6 = Math.round(myrange3[6]);
+					var min7 = Math.round(myrange3[7]);
+					var min8 = Math.round(myrange3[8]);
+					var min9 = Math.round(myrange3[9]);
+					var min10 = Math.round(myrange3[10]);
+					var min11 = Math.round(myrange3[11]);
+
+
+ var myChart = echarts.init(document.getElementById('Covid'));
+					
+					var myVisualMap =  [{
+						type: 'piecewise',
+						splitNumber: 11,
+						min: 0,
+						max: mymax,
+						seriesIndex: [0,1,2,3],
+						calculable: true,
+						zlevel: 4,
+						outOfRange: {
+							color: '#e8eaed',
+						},
+						formatter: function(value1, value2) {
+							//console.log(value2);
+							if (value2 !== undefined) {
+								return value1.toLocaleString(undefined, {
+									maximumFractionDigits: 0
+								}) + ' - ' + value2.toLocaleString(undefined, {
+									maximumFractionDigits: 0
+								});
+							} else {
+								return ' <= ' + value1.toLocaleString(undefined, {
+									maximumFractionDigits: 0
+								});
+							}
+						},
+						pieces: [
+							{value: -999999999999, label: 'Not Applicable', color: '#aaa1a1'},
+							{min: 0, max: min0, label: '<=' + min0.toLocaleString(undefined, {maximumFractionDigits: 0}),color: myColors[0]},
+							{min: min0, max: min1, color: myColors[1]},
+							{min: min1, max: min2, color: myColors[2]},
+							{min: min2, max: min3, color: myColors[3]},
+							{min: min3, max: min4, color: myColors[4]},
+							{min: min4, max: min5, color: myColors[5]},
+							{min: min5, max: min6, color: myColors[6]},
+							{min: min6, max: min7, color: myColors[7]},
+							{min: min7, max: min8, color: myColors[8]},
+							{min: min8, max: min9, color: myColors[9]},
+							{min: min9, max: min10, color: myColors[10]},
+							{min: min10, max: min11, color: myColors[11]},
+							{min: min11, max: mymax, label: '> ' + min11.toLocaleString(undefined, {maximumFractionDigits: 0}), color: myColors[12]},
+							{value: 999999999999, label: 'No Data', color: '#e8eaed'},
+							
+						],
+
+						showLabel: true,
+						textStyle: {
+							color: '#414141',
+							fontFamily: '"Helvetica", Helvetica',
+						},
+
+
+					}];	
+					var myDStyle = {
+                                normal: {
+                                    areaColor: "#D3D3D3",
+                                    borderColor: "rgba(255,255,255,.5)",
+                                    shadowColor: "#1773c3",
+                                    shadowBlur: 0
+                                },
+                                emphasis: {
+                                    areaColor: "#E3E3E3",
+                                    color: "#414141",
+                                    borderColor: BGColor = "rgb(65,65,65,0.5)",
+                                    borderWidth: .5
+                                }
+                            };
+					var myToolbox = {
+                            show: true,
+                            orient: 'vertical',
+                            left: 'right',
+                            top: 'center',
+                            feature: {
+                                saveAsImage: {title:'save as image'}
+                            }
+                        };	
+						var myGrid = {
+                            right: 40,
+                            top: 100,
+                            bottom: 40,
+                            width: '30%'
+                        };
+						var myXAxis = [{
+                            position: 'top',
+                            type: 'value',
+                            boundaryGap: false,
+                            splitLine: {
+                                show: false
+                            },
+                            axisLine: {
+                                show: false
+                            },
+                            axisTick: {
+                                show: false
+                            },
+                        }];
+						var myYAxis = [{
+                            type: 'category',
+                            data: titledata,
+							
+                            axisTick: {
+                                alignWithLabel: true
+                            }
+                        }];
+					//Here general variable definition and properties
+					var myToolTip = {
+                            trigger: 'item',
+							confine: true,
+							formatter: function(params) {
+								console.log(params.name);
+								var myWhole = _.filter(data, {'CountryName': params.name});
+								console.log(myWhole);
+								myWhole=myWhole[0];
+								console.log(myWhole);
+								var TBpD=(myWhole.TBAvInc < 1) ? "<1":Number(myWhole.TBAvInc).toLocaleString(void 0, {maximumFractionDigits: 0});
+								var TBDpD=(myWhole.TBAvDeaths < 1) ? "<1":Number(myWhole.TBAvDeaths).toLocaleString(void 0, {maximumFractionDigits: 0});
+								var TotTBInc=(myWhole.TBCases < 1) ? "<1":Number(myWhole.TBCases).toLocaleString(void 0, {maximumFractionDigits: 0});
+								var TotTBD=(myWhole.TBDeaths < 1) ? "<1":Number(myWhole.TBDeaths).toLocaleString(void 0, {maximumFractionDigits: 0});
+								var CovAvCases=(myWhole.CovidAvInc < 1) ? "<1":Number(myWhole.CovidAvInc).toLocaleString(void 0, {maximumFractionDigits: 0});
+								var CovAvDeaths = (myWhole.CovidAvDeaths < 1) ? "<1":Number(myWhole.CovidAvDeaths).toLocaleString(void 0, {maximumFractionDigits: 0});
+								var CovTotalDeaths = (myWhole.Deaths < 1) ? "<1":Number(myWhole.Deaths).toLocaleString(void 0, {maximumFractionDigits: 0});
+								var CovTotalCases = (myWhole.Confirmed < 1) ? "<1":Number(myWhole.Confirmed).toLocaleString(void 0, {maximumFractionDigits: 0});
+								var updateDate = (myWhole.Date);
+								//Here you have to use the name to get all parameters from the general data
+								var res = '<div style="border-bottom: 1px solid rgba(255,255,255,.3); font-size: 14px;padding-bottom: 7px;margin-bottom: 7px">' +
+								params.name + '   <br/>' + '</div>' + 
+								'People developing '+'<b>TB</b>' +' per day: ' + '<b>'+TBpD+'</b>' +  '<br/>' +  
+								'People dying from '+'<b>TB</b>' +' per day: ' + '<b>'+TBDpD +'</b>'+ '<br/>' + 
+								'People developing '+'<b>TB</b>' +' per year: '+ '<b>'+TotTBInc + '</b>' +'<br/>' + 
+								'People dying from '+'<b>TB</b>' +' per year: ' + '<b>' +TotTBD + '</b>' +'<br/>'  +  '<br/>' +
+								'People confirmed '+'<b>+ to Covid-19</b>' +' per day: ' + '<b>' + CovAvCases + '</b>'+ '<br/>'+ 
+								'People dying from '+ '<b>Covid-19</b>'+ ' per day: ' + '<b>' +CovAvDeaths + '</b>' + '<br/>' + 
+								'People confirmed '+'<b>+ to Covid-19</b>' +', Total: ' + '<b>' + CovTotalCases + '</b>'+'<br/>' + 
+								'People dying from '+ '<b>Covid-19</b>'+' Total: ' +  '<b>' + CovTotalDeaths + '</b>'+ '<br/>' +
+								'Latest Covid-19 update: ' +  '<b>' + updateDate + '</b>' + '<br/>';
+								return res;
+								
+							}	
+                        };
+                    myChart.setOption({
+                        series: [{
+                            type: 'map',
+                            map: 'world',
+
+                        }]
+                    });
+
+                    //Here option TBD = TB daily deaths
+                    optionTBD = {
+                        title: [{
+                            text: 'People dying from TB (average per day)',
+                            sublink: 'https://www.who.int/tb/country/data/download/en/',
+                            subtarget: 'blank',
+                            subtext: 'Sources: WHO Global TB Database',
+                            left: 'center'
+                        }, {
+                            subtext: 'Please click one of these indicators',
+							top: '6%',
+                            left: 'left'
+                        }],
+                        tooltip: myToolTip,
+                        legend: {
+                            top: '12%',
+                            orient: 'vertical',
+                            left: 'left',
+                            data: ['People dying from TB per day', 'People getting sick with TB per day', 'People dying from Covid-19 per day','People getting sick with Covid-19 per day'],
+						    selected: {
+								'People dying from TB per day':true, 
+								'People getting sick with TB per day':false, 
+								'People dying from Covid-19 per day':false,
+								'People getting sick with Covid-19 per day':false
+							},
+						   
+                        },
+                        visualMap: myVisualMap,
+                        toolbox: myToolbox,
+                        
+                        geo: {
+                            id: "mygeo",
+                            map: "world",
+                            left: '10',
+                            right: '5%',
+                            top: 100,
+                            bottom: "5%",
+                            zoom: 1,
+                            roam: true,
+                            label: {
+                                normal: {
+                                    show: false
+                                },
+                                emphasis: {
+                                    show: true,
+                                    fontFamily: '"Helvetica", Helvetica',
+                                    color: "rgba(255,255,255,.7)",
+                                    backgroundColor: "rgba(0, 0, 0, 0.4)",
+                                    borderRadius: 4,
+                                    padding: 4,
+                                    borderWidth: .1,
+                                    borderColor: "rgb(65,65,65,0.5)"
+                                }
+                            },
+                            regions: myDRegions,
+                            itemStyle: myDStyle
+                        },
+                        series: [{
+                            z: 3, zlevel: 2,
+                            name: 'People dying from TB per day',
+                            geoIndex: 0,
+                            type: 'map',
+                            mapType: "world",
+                            left: '10',
+                            right: '5%',
+                            top: 100,
+                            bottom: "5%",
+                            zoom: 1,
+                            data: resultdata0
+                        },{
+                            z: 3, 
+                            name: 'People getting sick with TB per day',
+                            type: 'map',
+                        },{
+                            z: 3,
+                            name: 'People dying from Covid-19 per day',
+                            type: 'map',
+                        },{
+                            z: 3,
+                            name: 'People getting sick with Covid-19 per day',
+                            type: 'map',
+                        },  {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(China_India_Right),
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(China_India_1),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_2),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_3),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_Pakistan_1),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_4),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_5),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_6),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(Sudan_SSudan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            data: convertData(Egypt_Sudan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_Pakistan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(Ethiopia_Somalia),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }]
+                    };
+                    //Here TBI for TB daily New cases
+                    optionTBI = {
+                        title: [{
+                            text: 'People getting sick with TB (average per day)',
+                            sublink: 'https://www.who.int/tb/data/en/',
+                            subtarget: 'blank',
+                            subtext: 'Sources: WHO Global TB Database',
+                            left: 'center'
+                        },  {
+                            subtext: 'Please click one of these indicators',
+							top: '6%',
+                            left: 'left'
+                        }, {
+                            text: 'People with TB (Total Global, 2018): ' + sum1.toLocaleString(void 0, {maximumFractionDigits: 0}),
+                            right: 120,
+                            top: 40,
+                            width: 100,
+                            textStyle: {
+                                color: 'black',
+                                fontSize: 16
+                            }
+                        }],
+                        tooltip: myToolTip,
+                        legend: {
+                            top: '12%',
+                            orient: 'vertical',
+                            left: 'left',
+                            data: ['People dying from TB per day', 'People getting sick with TB per day', 'People dying from Covid-19 per day','People getting sick with Covid-19 per day'],
+						    selected: {
+								'People dying from TB per day':false, 
+								'People getting sick with TB per day':true, 
+								'People dying from Covid-19 per day':false,
+								'People getting sick with Covid-19 per day':false
+							},
+						   selectedMode: 'single',
+                        },
+                        visualMap: myVisualMap,
+                        toolbox: myToolbox,
+                        grid: myGrid,
+                        xAxis: myXAxis,
+                        yAxis: [{
+                            type: 'category',
+							inverse: true,
+                            data: titledata5,
+                            axisTick: {
+                                alignWithLabel: true
+                            }
+                        }],
+                        geo: {
+                            id: "mygeo",
+                            map: "world",
+                            left: '10',
+                            right: '35%',
+                            top: 100,
+                            bottom: "5%",
+                            zoom: 0.75,
+                            roam: true,
+                            label: {
+                                normal: {
+                                    show: false
+                                },
+                                emphasis: {
+                                    show: true,
+                                    fontFamily: '"Helvetica", Helvetica',
+                                    color: "rgba(255,255,255,.7)",
+                                    backgroundColor: "rgba(0, 0, 0, 0.4)",
+                                    borderRadius: 4,
+                                    padding: 4,
+                                    borderWidth: .1,
+                                    borderColor: "rgb(65,65,65,0.5)"
+                                }
+                            },
+                            regions: myDRegions,
+                            itemStyle: myDStyle
+                        },
+                        series: [{
+                            z: 3,
+                            name: 'People dying from TB per day',
+                            type: 'map',
+                        },{
+                            z: 3, zlevel: 2,
+                            name: 'People getting sick with TB per day',
+                            geoIndex: 0,
+                            type: 'map',
+                            mapType: "world",
+                            left: '10',
+                            right: '35%',
+                            top: 100,
+                            bottom: "5%",
+                            zoom: 0.75,
+                            data: resultdata1
+                        },{
+                            z: 3,
+                            name: 'People dying from Covid-19 per day',
+                            type: 'map',
+                        },{
+                            z: 3,
+                            name: 'People getting sick with Covid-19 per day',
+                            type: 'map',
+                        }, {
+                            name: 'Top 20 Countries',
+                            z: 1,
+                            type: 'bar',
+                            label: {
+                                normal: {
+									formatter: function (param, index) {
+										var a = param.data.value;
+											// Formatted to string with thosand separator
+										return a.toLocaleString(void 0, {maximumFractionDigits: 0});
+									},
+                                    show: true
+                                },
+                                emphasis: {
+                                    show: true,
+                                }
+                            },
+                            itemStyle: {
+								color: '#8b0000',
+								barBorderColor: '#8b0000' ,
+								barBorderRadius: 3 ,
+								
+							},
+                            data: resultdata5
+                        },{
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(China_India_Right),
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(China_India_1),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_2),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_3),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_Pakistan_1),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_4),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_5),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_6),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(Sudan_SSudan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            data: convertData(Egypt_Sudan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_Pakistan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(Ethiopia_Somalia),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }]
+                    };
+                    //Here for Covid Deaths CoD
+                    optionCoD = {
+                        title: [{
+                            text: 'People dying from Covid-19 (average per day)',
+                            sublink: 'https://github.com/open-covid-19/data',
+                            subtarget: 'blank',
+                            subtext: 'Sources: ECDC/Ministries of Health and other sources as described in Open COVID-19 Dataset repository',
+                            left: 'center'
+                        },  {
+                            subtext: 'Please click one of these indicators',
+							top: '6%',
+                            left: 'left'
+                        }, {
+                            text: 'Covid-19 confirmed deaths (Total Global since pandemics started): ' + sum2.toLocaleString(void 0, {maximumFractionDigits: 0}),
+                            right: 120,
+                            top: 40,
+                            width: 100,
+                            textStyle: {
+                                color: 'black',
+                                fontSize: 16
+                            }
+                        }],
+                        tooltip: myToolTip,
+                        legend: {
+                            top: '12%',
+                            orient: 'vertical',
+                            left: 'left',
+                           data: ['People dying from TB per day', 'People getting sick with TB per day', 'People dying from Covid-19 per day','People getting sick with Covid-19 per day'],
+						    selected: {
+								'People dying from TB per day':false, 
+								'People getting sick with TB per day':false, 
+								'People dying from Covid-19 per day':true,
+								'People getting sick with Covid-19 per day':false
+							},
+						   selectedMode: 'single',
+                        },
+                        visualMap: myVisualMap,
+                        toolbox: myToolbox,
+                        grid: myGrid,
+                        xAxis: myXAxis,
+                        yAxis: [{
+                            type: 'category',
+							inverse: true,
+                            data: titledata6,
+                            axisTick: {
+                                alignWithLabel: true
+                            }
+                        }],
+                        geo: {
+                            id: "mygeo",
+                            map: "world",
+                            left: '10',
+                            right: '35%',
+                            top: 100,
+                            bottom: "5%",
+                            zoom: 0.75,
+                            roam: true,
+                            label: {
+                                normal: {
+									
+                                    show: false
+                                },
+                                emphasis: {
+                                    show: true,
+                                    fontFamily: '"Helvetica", Helvetica',
+                                    color: "rgba(255,255,255,.7)",
+                                    backgroundColor: "rgba(0, 0, 0, 0.4)",
+                                    borderRadius: 4,
+                                    padding: 4,
+                                    borderWidth: .1,
+                                    borderColor: "rgb(65,65,65,0.5)"
+                                }
+                            },
+                            regions: myDRegions,
+                            itemStyle: myDStyle
+                        },
+                        series: [{
+                            z: 3,
+                            name: 'People dying from TB per day',
+                            type: 'map',
+                        },{
+                            z: 3,
+                            name: 'People getting sick with TB per day',
+                            type: 'map',
+                        },{
+                            z: 3, zlevel: 2,
+                            name: 'People dying from Covid-19 per day',
+                            geoIndex: 0,
+                            type: 'map',
+                            mapType: "world",
+                            left: '10',
+                            right: '35%',
+                            top: 100,
+                            bottom: "5%",
+                            zoom: 0.75,
+                            data: resultdata2
+                        },{
+                            z: 3,
+                            name: 'People getting sick with Covid-19 per day',
+                            type: 'map',
+                        }, {
+                            name: 'Top 20 Countries',
+                            z: 1,
+                            type: 'bar',
+                            label: {
+                                normal: {
+									formatter: function (param, index) {
+										var a = param.data.value;
+											// Formatted to string with thosand separator
+										return a.toLocaleString(void 0, {maximumFractionDigits: 0});
+									},
+                                    show: true
+                                },
+                                emphasis: {
+                                    show: true,
+                                }
+                            },
+                            itemStyle: {
+								color: '#8b0000',
+								barBorderColor: '#8b0000' ,
+								barBorderRadius: 3 ,
+								
+							},
+                            data: resultdata6
+                        },{
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(China_India_Right),
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(China_India_1),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_2),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_3),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_Pakistan_1),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_4),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_5),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_6),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(Sudan_SSudan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            data: convertData(Egypt_Sudan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_Pakistan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(Ethiopia_Somalia),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }]
+                    };
+
+                    //Here for CoI, Covid Incidence
+                    optionCoI = {
+                        title: [{
+                            text: 'People getting sick with Covid-19 (average per day)',
+                            sublink: 'https://github.com/open-covid-19/data',
+                            subtarget: 'blank',
+                            subtext: 'Sources: ECDC/Ministries of Health and other sources as described in Open COVID-19 Dataset repository',
+                            left: 'center'
+                        },  {
+                            subtext: 'Please click one of these indicators',
+							top: '6%',
+                            left: 'left'
+                        }, {
+                            text: 'Confirmed Covid-19 infections (Total Global since pandemics started): ' + sum3.toLocaleString(void 0, {maximumFractionDigits: 0}),
+                            right: 120,
+                            top: 40,
+                            width: 100,
+                            textStyle: {
+                                color: 'black',
+                                fontSize: 16
+                            }
+                        }],
+                        tooltip: myToolTip,
+                        legend: {
+                            top: '12%',
+                            orient: 'vertical',
+                            left: 'left',
+                            data: ['People dying from TB per day', 'People getting sick with TB per day', 'People dying from Covid-19 per day','People getting sick with Covid-19 per day'],
+						    selected: {
+								'People dying from TB per day':false, 
+								'People getting sick with TB per day':false, 
+								'People dying from Covid-19 per day':false,
+								'People getting sick with Covid-19 per day':true
+							},
+						   selectedMode: 'single',
+                        },
+						visualMap: myVisualMap,
+                        toolbox: myToolbox,
+                        grid: myGrid,
+                        xAxis: myXAxis,
+                        yAxis: [{
+                            type: 'category',
+                            data: titledata7,
+							inverse: true,
+                            axisTick: {
+                                alignWithLabel: true
+                            }
+                        }],
+                        geo: {
+                            id: "mygeo",
+                            map: "world",
+                            left: '10',
+                            right: '35%',
+                            top: 100,
+                            bottom: "5%",
+                            zoom: 0.75,
+                            roam: true,
+                            label: {
+                                normal: {
+                                    show: false
+                                },
+                                emphasis: {
+                                    show: true,
+                                    fontFamily: '"Helvetica", Helvetica',
+                                    color: "rgba(255,255,255,.7)",
+                                    backgroundColor: "rgba(0, 0, 0, 0.4)",
+                                    borderRadius: 4,
+                                    padding: 4,
+                                    borderWidth: .1,
+                                    borderColor: "rgb(65,65,65,0.5)"
+                                }
+                            },
+                            regions: myDRegions,
+                            itemStyle: myDStyle
+                        },
+                        series: [{
+                            z: 3,
+                            name: 'People dying from TB per day', type: 'map',
+                        },{
+                            z: 3,
+                            name: 'People getting sick with TB per day', type: 'map',                           
+                        },{
+                            z: 3,
+                            name: 'People dying from Covid-19 per day', type: 'map',
+                        },{
+                            z: 3, zlevel: 2,
+                            name: 'People getting sick with Covid-19 per day',
+                            geoIndex: 0,
+                            type: 'map',
+                            mapType: "world",
+                            left: '10',
+                            right: '35%',
+                            top: 100,
+                            bottom: "5%",
+                            zoom: 0.75,
+                            data: resultdata3
+                        }, {
+                            name: 'Top 20 countries',
+                            z: 1,
+                            type: 'bar',
+							visualMap: false,
+                            label: {
+                                normal: {
+									formatter: function (param, index) {
+										var a = param.data.value;
+											// Formatted to string with thosand separator
+										return a.toLocaleString(void 0, {maximumFractionDigits: 0});
+									},
+                                    show: true
+                                },
+                                emphasis: {
+                                    show: true,
+                                }
+                            },
+                           itemStyle: {
+								color: '#8b0000',
+								barBorderColor: '#8b0000' ,
+								barBorderRadius: 3 ,
+								
+							},
+                            data: resultdata7
+                        },{
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(China_India_Right),
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(China_India_1),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_2),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_3),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_Pakistan_1),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_4),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_5),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_China_6),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(Sudan_SSudan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            data: convertData(Egypt_Sudan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(India_Pakistan),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }, {
+                            type: "lines",
+                            zlevel: 2,
+                            polyline: !0,
+                            geoIndex: 0,
+                            coordinateSystem: "geo",
+                            data: convertData(Ethiopia_Somalia),
+                            silent: !0,
+                            lineStyle: {
+                                normal: {
+                                    color: disputedBoundaryColor,
+                                    type: "dotted",
+                                    opacity: 1,
+                                    width: 2
+                                }
+                            }
+                        }]
+                    };
+                    myChart.setOption(optionTBD, true);
+
+
+
+                    myChart.on('legendselectchanged', function(params) {
+
+                        if (params.name == 'People dying from TB per day' ) {
+                            myChart.setOption(optionTBD, true);
+
+                        } else if (params.name == 'People getting sick with TB per day') {
+                            myChart.setOption(optionTBI, true);
+
+                        } else if (params.name == 'People dying from Covid-19 per day') {
+                            myChart.setOption(optionCoD, true);
+
+                        } else {
+                            myChart.setOption(optionCoI, true);
+
+                        }
+                    });
+					window.onresize = function() {
+					if (myChart != null && myChart != undefined) {
+                            myChart.resize();
+                        }
+					};
+                   
+
+		}
+
+
+});
+
+</script>
+<div class="callout">
+  <div class="callout-header">Notes & Disclaimer</div>
+  <span class="closebtn" onclick="this.parentElement.style.display='none';">×</span>
+  <div class="callout-container">
+	   <p>Covid-19 figures are regularly updated and only reflect people confirmed as positive. Diverse sources including country's Ministry of Health and the ECDC are used as described in https://github.com/open-covid-19/data. The tooltip - activated when you hover over the country - provides the latest data available. The Global TB database from WHO is used as the source for TB data</p>
+	   <p>Average daily Covid-19 incidence and deaths are calculated as the total number of people confirmed as Covid-19 positive divided by the number of days transcurred since the first notified case. TB related data reflect estimates provided by WHO for 2018. Daily estimates for TB correspond to yearly estimates for mortality and incidence divided by 365</p>
+	   <p>The designations employed and the presentation of the material on this map do not imply the expression of any opinion whatsoever on the part of the Stop TB Secretariat concerning the legal status of any country, territory, city or area or of its authorities, or concerning the delimitation of its frontiers or boundaries. White discontinuous lines are used to represent boundaries under dispute and to approximately show the line of control in Jammu and Kashmir agreed upon by India and Pakistan. The final status of Jammu and Kashmir has not yet been agreed upon by the parties. This map is based on UN Map No. 4170 Rev. 15 (July 2018). Every effort is made to ensure this map is free of errors but there is no warrant the map or its features are either spatially or temporally accurate or fit for a particular use. This map is provided without any warranty of any kind whatsoever, either express or implied.</p>
+	</div>
+</div>
+
+
+  </body>
+</html>
