@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="js/echarts.js"></script>
+    <script src="js/lodash.js"></script>
+    <script src="js/chroma.js"></script>
+    <script src="js/papaparse.min.js"></script>
+    <script src="js/Utils.js"></script>
+    <script src="data/world.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <title>GAPS</title>
+    <div style="position:relative; width: 600px;height:400px" class="cardMap" id="calculableMap" ></div>
+</body>
+<script>
+//Define basic data, years and file source
+const masterSheetURL= "https://docs.google.com/spreadsheets/d/1XcWHgrDsILGbfgcXDEo8Dph5ypMUUOOF-iZjn-pshIQ/pub?output=csv";
+const myYear = [2021,2022,2023]; 
+var bOption = {
+    backgroundColor: "#061740",
+    dataset: {results:[]},
+    title: [ {
+        id: 'statistic',
+        right: 120,
+        top: 40,
+        width: 100,
+        textStyle: {
+            color: 'white',
+            fontSize: 16
+        }
+    }],
+    
+    geo: {
+        map: 'world',
+        left: '10',
+        right: '35%',
+        zoom: zoomFactor,
+        label: {
+            emphasis: {
+                show: false
+            }
+        },
+        boundingCoords: [
+// [lng, lat] of left-top corner
+[
+  -120.234375,
+  38.272688535980976
+],
+// [lng, lat] of right-bottom corner
+[ 164.1796875,
+  -44.087585028245165]
+        ],
+        roam: true,
+        itemStyle: {
+            normal: {
+                areaColor: 'white',
+                borderColor: 'grey'
+            },
+            emphasis: {
+                areaColor: 'lightgrey'
+            }
+        }
+    },
+    toolbox: {
+       iconStyle: { normal: {borderColor: 'gray'}, emphasis: {borderColor: 'white'}},
+       feature: {saveAsImage: {excludeComponents: ['toolbox']}}
+    },
+    brush: {
+        geoIndex: 0,
+        outOfBrush: {color: 'transparent'}, 
+        seriesIndex: [0,1],
+        //throttleType: 'debounce',
+        //throttleDelay: 300
+    },
+    legend: {
+        top: '8%',
+        orient: 'horizontal',
+        left: 'left',
+        width: '100%',
+        itemGap: 6,
+        itemWidth: 15,
+        itemHeight: 10,
+        data: ['NSP', 'RDT', 'ACT', 'LLIN','SMC','IPTp','IRS'],
+        selected: {
+            'NSP': true,
+            'RDT': false,
+            'ACT': false,
+            'LLIN': false,
+            'SMC': false,
+            'IPTp': false,
+            'IRS': false,
+        },
+
+    },
+    tooltip: {
+        trigger: 'item',
+        confine: true,
+        formatter: function(params) {
+            console.log(params);
+            
+
+            //Here you have to use the name to get all parameters from the general data
+            var res = '<div style="border-bottom: 1px solid rgba(255,255,255,.3); font-size: 14px;padding-bottom: 7px;margin-bottom: 7px">' +
+                params.name + '   <br/>' + '</div>';
+                
+
+            return res;
+
+        }
+    },
+    visualMap: {
+        type: 'piecewise',
+        itemGap: 2,
+        splitNumber: 10,
+        seriesIndex: [0,1],
+        calculable: true,
+        zlevel: 4,
+        textStyle: {color: 'white'},
+        inRange: {color: ['lightblue', '#0262FF','blue']},
+       
+        outOfRange: { color: '#e8eaed',
+        },
+        formatter: function(value1, value2) {
+            if (value2 !== undefined) {
+                return nFormatter(value1, 2) + ' - ' + nFormatter(value2, 2)
+            } else {
+                return ' <= ' + nFormatter(value1, 2)
+            }
+        },
+       
+
+
+    },
+    grid: {
+        right: 40,
+        top: 100,
+        bottom: 40,
+        width: '30%'
+    },
+    xAxis: {
+        type: 'value',
+        scale: true,
+        position: 'top',
+        boundaryGap: false,
+        splitLine: {
+            show: false
+        },
+        axisLine: {
+            show: false
+        },
+        axisTick: {
+            show: false
+        },
+        axisLabel: {
+            margin: 2,
+            textStyle: {
+                color: '#aaa'
+            },
+            formatter: function(value, index) {
+                const rx = /\.0+$|(\.[0-9]*[1-9])0+$/;
+                var item = lookup.slice().reverse().find(function(item) {
+                    return value >= item.value;
+                });
+                return item ? (value / item.value).toFixed(3).replace(rx, "$1") + item.symbol : "0";
+            },
+
+        }
+    },
+    yAxis: {
+        type: 'category',
+        name: 'TOP 20',
+        nameGap: 16,
+        axisLine: {
+            show: false,
+            lineStyle: {
+                color: '#ddd'
+            }
+        },
+        axisTick: {
+            show: false,
+            lineStyle: {
+                color: '#ddd'
+            }
+        },
+        axisLabel: {
+            interval: 0,
+            textStyle: {
+                color: '#ddd'
+            }
+        },
+        data: []
+    },
+    series: [ {
+        name: 'myScatter',
+        type: 'scatter',
+        coordinateSystem: 'geo',
+        boundingCoords: [
+            // [lng, lat] of left-top corner
+            [-120.234375,38.272688535980976],
+            // [lng, lat] of right-bottom corner
+            [ 164.1796875,-44.087585028245165]
+        ],
+        geoIndex: 0,
+        //zoom: zoomFactor,
+        symbolSize: 1,
+        label: {
+            normal: {
+                formatter: '{b}',
+                position: 'right',
+                show: false
+            },
+            emphasis: {
+                show: true
+            }
+        },
+        itemStyle: {
+            normal: {
+                color: 'transparent'
+            }
+        },
+        encode: {
+            lng: 'Longitude',
+            lat: 'Latitude',
+        }
+    },{
+        id: 'NSP',
+        name: 'NSP',
+        type: 'map',
+        mapType: "world",
+        geoIndex: 0,
+        coordinateSystem: 'geo',
+        label: {
+            normal: {
+                formatter: '{b}',
+                position: 'right',
+                show: false
+            }
+        },
+        nameProperty: 'A3',
+        encode: {
+            name: 'A3',
+            value: 'Total GAP'
+        }
+    },{
+        id: 'RDT',
+        name: 'RDT',
+        type: 'map',
+        mapType: "world",
+        geoIndex: 0,
+        coordinateSystem: 'geo',
+        label: {
+            normal: {
+                formatter: '{b}',
+                position: 'right',
+                show: false
+            }
+        },
+        nameProperty: 'A3',
+        encode: {
+
+            name: 'A3',
+            value: 'RDTGAPS'
+        }
+    },{
+        id: 'ACT',
+        name: 'ACT',
+        type: 'map',
+        mapType: "world",
+        geoIndex: 0,
+        coordinateSystem: 'geo',
+        label: {
+            normal: {
+                formatter: '{b}',
+                position: 'right',
+                show: false
+            }
+        },
+        nameProperty: 'A3',
+        encode: {
+
+            name: 'A3',
+            value: 'ACTGAPS'
+        }
+    },{
+        id: 'LLIN',
+        name: 'LLIN',
+        type: 'map',
+        mapType: "world",
+        geoIndex: 0,
+        coordinateSystem: 'geo',
+        label: {
+            normal: {
+                formatter: '{b}',
+                position: 'right',
+                show: false
+            }
+        },
+        nameProperty: 'A3',
+        encode: {
+
+            name: 'A3',
+            value: 'LLINGAPS'
+        }
+    },{
+        id: 'SMC',
+        name: 'SMC',
+        type: 'map',
+        mapType: "world",
+        geoIndex: 0,
+        coordinateSystem: 'geo',
+        label: {
+            normal: {
+                formatter: '{b}',
+                position: 'right',
+                show: false
+            }
+        },
+        nameProperty: 'A3',
+        encode: {
+
+            name: 'A3',
+            value: 'SMCGAPS'
+        }
+    }, {
+        id: 'IPTp',
+        name: 'IPTp',
+        type: 'map',
+        mapType: "world",
+        geoIndex: 0,
+        coordinateSystem: 'geo',
+        label: {
+            normal: {
+                formatter: '{b}',
+                position: 'right',
+                show: false
+            }
+        },
+        nameProperty: 'A3',
+        encode: {
+
+            name: 'A3',
+            value: 'IPTPGAPS'
+        }
+    },{
+        id: 'IRS',
+        name: 'IRS',
+        type: 'map',
+        mapType: "world",
+        geoIndex: 0,
+        coordinateSystem: 'geo',
+        label: {
+            normal: {
+                formatter: '{b}',
+                position: 'right',
+                show: false
+            }
+        },
+        nameProperty: 'A3',
+        encode: {
+
+            name: 'A3',
+            value: 'IRSGAPS'
+        }
+    },{
+        id: 'bar',
+        zlevel: 2,
+        type: 'bar',
+        symbol: 'none',
+        itemStyle: {
+            normal: {
+                color: '#0262FF'
+            }
+        },
+        data: []
+    }]
+}
+
+
+function byYearOption(Objeto, Year) {
+    // Loop over an object to split a given list of keys (toSplit) with complex names into several properties and adds them as new key/values pairs
+    let Accumulator = [];
+    let temp = [];
+    let tempi = {};
+        for (let i = 0; i < Objeto.length; i++) {
+            tempi = _.pick(Objeto[i], ['Country', 'A3', 'WHO_Region','Latitude','Longitude']);
+            temp = _.pickBy(Objeto[i], function(o,k) { return _.endsWith(k,String(Year))});
+            //Rename keys to remove year
+            temp = _.merge(tempi,_.mapKeys(temp, function(value, key) {return key.replace(/[^a-z]/gi, '');}));
+            //console.log(temp)
+            Accumulator = _.concat(Accumulator, temp);
+        }
+    return Accumulator;
+}
+    Papa.parse(masterSheetURL, {
+
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: 'greedy',
+        complete: function (results) {
+           //Remove null countries
+            results = _.reject(results.data, {'A3': null});
+            //Loop over years to get the options pushed to the array
+            let option1 = byYearOption(results, myYear[0]);
+            console.log(option1)
+            console.log(datatoMap(results, 'TotalGAP'))
+                                           
+//Create values for the info-boxes using Total Needs, Financed and GAPS for the 3 years (sparklines, bar plot) and theyear in course
+
+            var myChart = echarts.init(document.getElementById('calculableMap'));
+            bOption.dataset.source= results; console.log(bOption);
+             myChart.setOption(bOption);
+            
+            // Echarts Resize
+            window.addEventListener("resize", () => {
+                myChart.resize(); //resize 
+            });
+
+
+        }
+    })
+</script>
+
+</html>
